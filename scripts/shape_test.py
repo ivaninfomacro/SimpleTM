@@ -94,6 +94,8 @@ def build_model_configs(seq_len: int, pred_len: int, c_out: int, dec_in: int):
         e_layers=1,
         activation='gelu',
         dec_in=dec_in,
+        embed='timeF',
+        freq='h',
     )
 
 
