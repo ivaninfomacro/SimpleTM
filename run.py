@@ -121,7 +121,7 @@ if __name__ == '__main__':
     n_out = getattr(dataset_for_dims, 'out_dim', dataset_for_dims.data_y.shape[1])
     args.enc_in = n_in
     args.c_out = n_out
-    args.dec_in = n_out
+    args.dec_in = n_in
     args.n_series = n_in
 
     if args.use_gpu and args.use_multi_gpu:
