@@ -294,6 +294,17 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             scale = test_data.scaler.scale_[: self.args.c_out]
             preds = preds * scale + mean
             trues = trues * scale + mean
+        elif getattr(test_data, 'scaler', None) is not None and getattr(self.args, 'inverse', False):
+            if hasattr(test_data, 'input_cols') and hasattr(test_data, 'output_cols'):
+                col_to_idx = {col: idx for idx, col in enumerate(test_data.input_cols)}
+                y_indices = [col_to_idx[c] for c in test_data.output_cols]
+            else:
+                y_indices = list(range(self.args.c_out))
+            mean = test_data.scaler.mean_[y_indices]
+            scale = test_data.scaler.scale_[y_indices]
+            preds = preds * scale + mean
+            trues = trues * scale + mean
+            print("Test metrics computed on inverse-transformed outputs for c_out channels only")
 
         # result save
         folder_path = './checkpoints/' + setting + '/'
@@ -353,8 +364,13 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 outputs = outputs[:, -self.args.pred_len:, :self.args.c_out]
                 outputs = outputs.detach().cpu().numpy()
                 if pred_data.scale and self.args.inverse:
-                    mean = pred_data.scaler.mean_[:self.args.c_out]
-                    scale = pred_data.scaler.scale_[:self.args.c_out]
+                    if hasattr(pred_data, 'input_cols') and hasattr(pred_data, 'output_cols'):
+                        col_to_idx = {col: idx for idx, col in enumerate(pred_data.input_cols)}
+                        y_indices = [col_to_idx[c] for c in pred_data.output_cols]
+                    else:
+                        y_indices = list(range(self.args.c_out))
+                    mean = pred_data.scaler.mean_[y_indices]
+                    scale = pred_data.scaler.scale_[y_indices]
                     outputs = outputs * scale + mean
                 preds.append(outputs)
 

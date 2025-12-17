@@ -44,7 +44,23 @@ class Dataset_ETT_hour(Dataset):
         if self.target not in input_cols:
             raise ValueError(f"Target column {self.target} not found in data")
         ot_idx = input_cols.index(self.target)
+        post_target_cols = input_cols[ot_idx + 1:]
         output_cols = input_cols[:ot_idx + 1]
+        if output_cols[-1] != self.target:
+            raise ValueError(
+                f"Target column {self.target} must be the last column in output_cols; found {output_cols[-1]} at index {len(output_cols)-1}"
+            )
+        mode_like = [
+            col for col in post_target_cols
+            if ('mode' in col.lower())
+            or ('imf' in col.lower())
+            or ('svmd' in col.lower())
+            or col.lower().startswith(f"{self.target.lower()}_")
+        ]
+        if mode_like and any(col in output_cols for col in mode_like):
+            raise ValueError(
+                f"Detected possible mode columns before target ({mode_like}); please append SVMD/IMF/mode columns after {self.target}"
+            )
         self.ot_idx = ot_idx
         self.input_cols = input_cols
         self.output_cols = output_cols
@@ -71,13 +87,15 @@ class Dataset_ETT_hour(Dataset):
             train_data = df_x[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)
             data_x = self.scaler.transform(df_x.values)
+            col_to_idx = {col: idx for idx, col in enumerate(input_cols)}
             if self.features == 'M':
-                mean = self.scaler.mean_[:len(output_cols)]
-                scale = self.scaler.scale_[:len(output_cols)]
+                y_indices = [col_to_idx[c] for c in output_cols]
+                mean = self.scaler.mean_[y_indices]
+                scale = self.scaler.scale_[y_indices]
                 data_y = (df_y.values - mean) / scale
             elif self.features == 'MS':
-                target_mean = self.scaler.mean_[self.ot_idx]
-                target_scale = self.scaler.scale_[self.ot_idx]
+                target_mean = self.scaler.mean_[col_to_idx[self.target]]
+                target_scale = self.scaler.scale_[col_to_idx[self.target]]
                 data_y = (df_y.values - target_mean) / target_scale
             else:
                 data_y = self.scaler.transform(df_y.values)
@@ -88,14 +106,6 @@ class Dataset_ETT_hour(Dataset):
         self.train_data = df_x[border1s[0]:border2s[0]].values
         self.N = data_x.shape[1]
         self.out_dim = data_y.shape[1]
-
-        self.train_data = df_data[border1s[0]:border2s[0]].values
-        self.N = data.shape[1]
-        self.out_dim = 1 if self.features in ['S', 'MS'] else self.N
-
-        self.train_data = df_data[border1s[0]:border2s[0]].values
-        self.N = data.shape[1]
-        self.out_dim = 1 if self.features in ['S', 'MS'] else self.N
 
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
@@ -169,7 +179,23 @@ class Dataset_ETT_minute(Dataset):
         if self.target not in input_cols:
             raise ValueError(f"Target column {self.target} not found in data")
         ot_idx = input_cols.index(self.target)
+        post_target_cols = input_cols[ot_idx + 1:]
         output_cols = input_cols[:ot_idx + 1]
+        if output_cols[-1] != self.target:
+            raise ValueError(
+                f"Target column {self.target} must be the last column in output_cols; found {output_cols[-1]} at index {len(output_cols)-1}"
+            )
+        mode_like = [
+            col for col in post_target_cols
+            if ('mode' in col.lower())
+            or ('imf' in col.lower())
+            or ('svmd' in col.lower())
+            or col.lower().startswith(f"{self.target.lower()}_")
+        ]
+        if mode_like and any(col in output_cols for col in mode_like):
+            raise ValueError(
+                f"Detected possible mode columns before target ({mode_like}); please append SVMD/IMF/mode columns after {self.target}"
+            )
         self.ot_idx = ot_idx
         self.input_cols = input_cols
         self.output_cols = output_cols
@@ -196,13 +222,15 @@ class Dataset_ETT_minute(Dataset):
             train_data = df_x[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)
             data_x = self.scaler.transform(df_x.values)
+            col_to_idx = {col: idx for idx, col in enumerate(input_cols)}
             if self.features == 'M':
-                mean = self.scaler.mean_[:len(output_cols)]
-                scale = self.scaler.scale_[:len(output_cols)]
+                y_indices = [col_to_idx[c] for c in output_cols]
+                mean = self.scaler.mean_[y_indices]
+                scale = self.scaler.scale_[y_indices]
                 data_y = (df_y.values - mean) / scale
             elif self.features == 'MS':
-                target_mean = self.scaler.mean_[self.ot_idx]
-                target_scale = self.scaler.scale_[self.ot_idx]
+                target_mean = self.scaler.mean_[col_to_idx[self.target]]
+                target_scale = self.scaler.scale_[col_to_idx[self.target]]
                 data_y = (df_y.values - target_mean) / target_scale
             else:
                 data_y = self.scaler.transform(df_y.values)
@@ -286,7 +314,23 @@ class Dataset_Custom(Dataset):
         if self.target not in input_cols:
             raise ValueError(f"Target column {self.target} not found in data")
         ot_idx = input_cols.index(self.target)
+        post_target_cols = input_cols[ot_idx + 1:]
         output_cols = input_cols[:ot_idx + 1]
+        if output_cols[-1] != self.target:
+            raise ValueError(
+                f"Target column {self.target} must be the last column in output_cols; found {output_cols[-1]} at index {len(output_cols)-1}"
+            )
+        mode_like = [
+            col for col in post_target_cols
+            if ('mode' in col.lower())
+            or ('imf' in col.lower())
+            or ('svmd' in col.lower())
+            or col.lower().startswith(f"{self.target.lower()}_")
+        ]
+        if mode_like and any(col in output_cols for col in mode_like):
+            raise ValueError(
+                f"Detected possible mode columns before target ({mode_like}); please append SVMD/IMF/mode columns after {self.target}"
+            )
         self.ot_idx = ot_idx
         self.input_cols = input_cols
         self.output_cols = output_cols
@@ -316,13 +360,15 @@ class Dataset_Custom(Dataset):
             train_data = df_x[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)
             data_x = self.scaler.transform(df_x.values)
+            col_to_idx = {col: idx for idx, col in enumerate(input_cols)}
             if self.features == 'M':
-                mean = self.scaler.mean_[:out_dim]
-                scale = self.scaler.scale_[:out_dim]
+                y_indices = [col_to_idx[c] for c in output_cols]
+                mean = self.scaler.mean_[y_indices]
+                scale = self.scaler.scale_[y_indices]
                 data_y = (df_y.values - mean) / scale
             elif self.features == 'MS':
-                target_mean = self.scaler.mean_[self.ot_idx]
-                target_scale = self.scaler.scale_[self.ot_idx]
+                target_mean = self.scaler.mean_[col_to_idx[self.target]]
+                target_scale = self.scaler.scale_[col_to_idx[self.target]]
                 data_y = (df_y.values - target_mean) / target_scale
             else:
                 data_y = self.scaler.transform(df_y.values)
@@ -523,7 +569,7 @@ class Dataset_Solar(Dataset):
 class Dataset_Pred(Dataset):
     def __init__(self, root_path, flag='pred', size=None,
                  features='S', data_path='ETTh1.csv',
-                 target='OT', scale=True, inverse=False, timeenc=0, freq='15min', cols=None):
+                 target='OT', scale=True, inverse=False, timeenc=0, freq='15min', cols=None, pred_y_from='x'):
         if size == None:
             self.seq_len = 24 * 4 * 4
             self.label_len = 24 * 4
@@ -541,6 +587,7 @@ class Dataset_Pred(Dataset):
         self.timeenc = timeenc
         self.freq = freq
         self.cols = cols
+        self.pred_y_from = pred_y_from
         self.root_path = root_path
         self.data_path = data_path
         self.__read_data__()
@@ -557,7 +604,23 @@ class Dataset_Pred(Dataset):
         if self.target not in input_cols:
             raise ValueError(f"Target column {self.target} not found in data")
         ot_idx = input_cols.index(self.target)
+        post_target_cols = input_cols[ot_idx + 1:]
         output_cols = input_cols[:ot_idx + 1]
+        if output_cols[-1] != self.target:
+            raise ValueError(
+                f"Target column {self.target} must be the last column in output_cols; found {output_cols[-1]} at index {len(output_cols)-1}"
+            )
+        mode_like = [
+            col for col in post_target_cols
+            if ('mode' in col.lower())
+            or ('imf' in col.lower())
+            or ('svmd' in col.lower())
+            or col.lower().startswith(f"{self.target.lower()}_")
+        ]
+        if mode_like and any(col in output_cols for col in mode_like):
+            raise ValueError(
+                f"Detected possible mode columns before target ({mode_like}); please append SVMD/IMF/mode columns after {self.target}"
+            )
         self.input_cols = input_cols
         self.output_cols = output_cols
         self.ot_idx = ot_idx
@@ -584,13 +647,15 @@ class Dataset_Pred(Dataset):
         if self.scale:
             self.scaler.fit(df_x.values)
             data_x = self.scaler.transform(df_x.values)
+            col_to_idx = {col: idx for idx, col in enumerate(input_cols)}
             if self.features == 'M':
-                mean = self.scaler.mean_[:out_dim]
-                scale = self.scaler.scale_[:out_dim]
+                y_indices = [col_to_idx[c] for c in output_cols]
+                mean = self.scaler.mean_[y_indices]
+                scale = self.scaler.scale_[y_indices]
                 data_y = (df_y.values - mean) / scale
             elif self.features == 'MS':
-                target_mean = self.scaler.mean_[self.ot_idx]
-                target_scale = self.scaler.scale_[self.ot_idx]
+                target_mean = self.scaler.mean_[col_to_idx[self.target]]
+                target_scale = self.scaler.scale_[col_to_idx[self.target]]
                 data_y = (df_y.values - target_mean) / target_scale
             else:
                 data_y = self.scaler.transform(df_y.values)
@@ -618,6 +683,9 @@ class Dataset_Pred(Dataset):
 
         self.data_x = data_x[border1:border2]
         if self.inverse:
+            warnings.warn(
+                "Dataset_Pred inverse=True returns seq_y derived from encoder inputs (N channels). "
+                "If your model expects decoder inputs of size c_out, consider setting pred_y_from='y' or disabling inverse.")
             self.data_y = df_y.values[border1:border2]
         else:
             self.data_y = data_y[border1:border2]
@@ -634,7 +702,10 @@ class Dataset_Pred(Dataset):
 
         seq_x = self.data_x[s_begin:s_end]
         if self.inverse:
-            seq_y = self.data_x[r_begin:r_begin + self.label_len]
+            if self.pred_y_from == 'y':
+                seq_y = self.data_y[r_begin:r_begin + self.label_len]
+            else:
+                seq_y = self.data_x[r_begin:r_begin + self.label_len]
         else:
             seq_y = self.data_y[r_begin:r_begin + self.label_len]
         seq_x_mark = self.data_stamp[s_begin:s_end]

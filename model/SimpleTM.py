@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from layers.Transformer_Encoder import Encoder, EncoderLayer
 from layers.SWTAttention_Family import GeomAttentionLayer, GeomAttention
 from layers.Embed import DataEmbedding_inverted
+import warnings
 
 
 class Model(nn.Module):
@@ -17,6 +18,7 @@ class Model(nn.Module):
         self.alpha = configs.alpha
         self.kernel_size = configs.kernel_size
         self.c_out = configs.c_out
+        self.dec_in = configs.dec_in
 
         enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, 
                                                configs.embed, configs.freq, configs.dropout)
@@ -61,6 +63,13 @@ class Model(nn.Module):
             x_enc = x_enc / stdev
 
         _, _, N = x_enc.shape
+        if self.c_out > N:
+            raise ValueError(f"c_out ({self.c_out}) must be <= input channels N ({N}); check dataset out_dim or column ordering")
+        if self.dec_in != N:
+            warnings.warn(
+                f"dec_in ({self.dec_in}) differs from encoder input channels ({N}); set dec_in to N to match wavelet attention semantics",
+                stacklevel=2,
+            )
 
         enc_embedding = self.enc_embedding
         encoder = self.encoder

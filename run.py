@@ -106,17 +106,25 @@ if __name__ == '__main__':
     np.random.seed(fix_seed)
 
     Data = data_dict[args.data]
-    timeenc = 0 if args.embed != 'timeF' else 1
-    dataset_for_dims = Data(
-        root_path=args.root_path,
-        data_path=args.data_path,
-        flag='train',
-        size=[args.seq_len, args.label_len, args.pred_len],
-        features=args.features,
-        target=args.target,
-        timeenc=timeenc,
-        freq=args.freq,
-    )
+    embed = getattr(args, 'embed', 'timeF')
+    timeenc = 0 if embed != 'timeF' else 1
+    try:
+        dataset_for_dims = Data(
+            root_path=args.root_path,
+            data_path=args.data_path,
+            flag='train',
+            size=[args.seq_len, args.label_len, args.pred_len],
+            features=args.features,
+            target=args.target,
+            timeenc=timeenc,
+            freq=args.freq,
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to instantiate dataset for dimension inference. data={args.data}, "
+            f"root_path={args.root_path}, data_path={args.data_path}, target={args.target}, features={args.features}. "
+            f"Check data file existence, target column presence, or pandas/numpy/sklearn installation. Original error: {exc}"
+        ) from exc
     n_in = getattr(dataset_for_dims, 'N', dataset_for_dims.data_x.shape[1])
     n_out = getattr(dataset_for_dims, 'out_dim', dataset_for_dims.data_y.shape[1])
     args.enc_in = n_in
