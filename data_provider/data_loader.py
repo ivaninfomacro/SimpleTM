@@ -40,23 +40,72 @@ class Dataset_ETT_hour(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
+        input_cols = [col for col in df_raw.columns if col != 'date']
+        if self.target not in input_cols:
+            raise ValueError(f"Target column {self.target} not found in data")
+        ot_idx = input_cols.index(self.target)
+        post_target_cols = input_cols[ot_idx + 1:]
+        output_cols = input_cols[:ot_idx + 1]
+        if output_cols[-1] != self.target:
+            raise ValueError(
+                f"Target column {self.target} must be the last column in output_cols; found {output_cols[-1]} at index {len(output_cols)-1}"
+            )
+        mode_like = [
+            col for col in post_target_cols
+            if ('mode' in col.lower())
+            or ('imf' in col.lower())
+            or ('svmd' in col.lower())
+            or col.lower().startswith(f"{self.target.lower()}_")
+        ]
+        if mode_like and any(col in output_cols for col in mode_like):
+            raise ValueError(
+                f"Detected possible mode columns before target ({mode_like}); please append SVMD/IMF/mode columns after {self.target}"
+            )
+        self.ot_idx = ot_idx
+        self.input_cols = input_cols
+        self.output_cols = output_cols
+        self.output_ot_idx = output_cols.index(self.target)
+
         border1s = [0, 12 * 30 * 24 - self.seq_len, 12 * 30 * 24 + 4 * 30 * 24 - self.seq_len]
         border2s = [12 * 30 * 24, 12 * 30 * 24 + 4 * 30 * 24, 12 * 30 * 24 + 8 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
-        if self.features == 'M' or self.features == 'MS':
-            cols_data = df_raw.columns[1:]
-            df_data = df_raw[cols_data]
+        if self.features == 'M':
+            df_x = df_raw[input_cols]
+            df_y = df_raw[output_cols]
+        elif self.features == 'MS':
+            df_x = df_raw[input_cols]
+            df_y = df_raw[[self.target]]
         elif self.features == 'S':
-            df_data = df_raw[[self.target]]
+            df_x = df_raw[[self.target]]
+            df_y = df_raw[[self.target]]
+        else:
+            raise ValueError(f"Unsupported feature type: {self.features}")
 
         if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
+            train_data = df_x[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)
-            data = self.scaler.transform(df_data.values)
+            data_x = self.scaler.transform(df_x.values)
+            col_to_idx = {col: idx for idx, col in enumerate(input_cols)}
+            if self.features == 'M':
+                y_indices = [col_to_idx[c] for c in output_cols]
+                mean = self.scaler.mean_[y_indices]
+                scale = self.scaler.scale_[y_indices]
+                data_y = (df_y.values - mean) / scale
+            elif self.features == 'MS':
+                target_mean = self.scaler.mean_[col_to_idx[self.target]]
+                target_scale = self.scaler.scale_[col_to_idx[self.target]]
+                data_y = (df_y.values - target_mean) / target_scale
+            else:
+                data_y = self.scaler.transform(df_y.values)
         else:
-            data = df_data.values
+            data_x = df_x.values
+            data_y = df_y.values
+
+        self.train_data = df_x[border1s[0]:border2s[0]].values
+        self.N = data_x.shape[1]
+        self.out_dim = data_y.shape[1]
 
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
@@ -70,8 +119,8 @@ class Dataset_ETT_hour(Dataset):
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
 
-        self.data_x = data[border1:border2]
-        self.data_y = data[border1:border2]
+        self.data_x = data_x[border1:border2]
+        self.data_y = data_y[border1:border2]
         self.data_stamp = data_stamp
 
     def __getitem__(self, index):
@@ -92,6 +141,7 @@ class Dataset_ETT_hour(Dataset):
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
+
 
 
 class Dataset_ETT_minute(Dataset):
@@ -125,23 +175,68 @@ class Dataset_ETT_minute(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
+        input_cols = [col for col in df_raw.columns if col != 'date']
+        if self.target not in input_cols:
+            raise ValueError(f"Target column {self.target} not found in data")
+        ot_idx = input_cols.index(self.target)
+        post_target_cols = input_cols[ot_idx + 1:]
+        output_cols = input_cols[:ot_idx + 1]
+        if output_cols[-1] != self.target:
+            raise ValueError(
+                f"Target column {self.target} must be the last column in output_cols; found {output_cols[-1]} at index {len(output_cols)-1}"
+            )
+        mode_like = [
+            col for col in post_target_cols
+            if ('mode' in col.lower())
+            or ('imf' in col.lower())
+            or ('svmd' in col.lower())
+            or col.lower().startswith(f"{self.target.lower()}_")
+        ]
+        if mode_like and any(col in output_cols for col in mode_like):
+            raise ValueError(
+                f"Detected possible mode columns before target ({mode_like}); please append SVMD/IMF/mode columns after {self.target}"
+            )
+        self.ot_idx = ot_idx
+        self.input_cols = input_cols
+        self.output_cols = output_cols
+        self.output_ot_idx = output_cols.index(self.target)
+
         border1s = [0, 12 * 30 * 24 * 4 - self.seq_len, 12 * 30 * 24 * 4 + 4 * 30 * 24 * 4 - self.seq_len]
         border2s = [12 * 30 * 24 * 4, 12 * 30 * 24 * 4 + 4 * 30 * 24 * 4, 12 * 30 * 24 * 4 + 8 * 30 * 24 * 4]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
-        if self.features == 'M' or self.features == 'MS':
-            cols_data = df_raw.columns[1:]
-            df_data = df_raw[cols_data]
+        if self.features == 'M':
+            df_x = df_raw[input_cols]
+            df_y = df_raw[output_cols]
+        elif self.features == 'MS':
+            df_x = df_raw[input_cols]
+            df_y = df_raw[[self.target]]
         elif self.features == 'S':
-            df_data = df_raw[[self.target]]
+            df_x = df_raw[[self.target]]
+            df_y = df_raw[[self.target]]
+        else:
+            raise ValueError(f"Unsupported feature type: {self.features}")
 
         if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
+            train_data = df_x[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)
-            data = self.scaler.transform(df_data.values)
+            data_x = self.scaler.transform(df_x.values)
+            col_to_idx = {col: idx for idx, col in enumerate(input_cols)}
+            if self.features == 'M':
+                y_indices = [col_to_idx[c] for c in output_cols]
+                mean = self.scaler.mean_[y_indices]
+                scale = self.scaler.scale_[y_indices]
+                data_y = (df_y.values - mean) / scale
+            elif self.features == 'MS':
+                target_mean = self.scaler.mean_[col_to_idx[self.target]]
+                target_scale = self.scaler.scale_[col_to_idx[self.target]]
+                data_y = (df_y.values - target_mean) / target_scale
+            else:
+                data_y = self.scaler.transform(df_y.values)
         else:
-            data = df_data.values
+            data_x = df_x.values
+            data_y = df_y.values
 
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
@@ -157,9 +252,13 @@ class Dataset_ETT_minute(Dataset):
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
 
-        self.data_x = data[border1:border2]
-        self.data_y = data[border1:border2]
+        self.data_x = data_x[border1:border2]
+        self.data_y = data_y[border1:border2]
         self.data_stamp = data_stamp
+
+        self.train_data = df_x[border1s[0]:border2s[0]].values
+        self.N = self.data_x.shape[1]
+        self.out_dim = self.data_y.shape[1]
 
     def __getitem__(self, index):
         s_begin = index
@@ -211,10 +310,31 @@ class Dataset_Custom(Dataset):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
-        cols = list(df_raw.columns)
-        cols.remove(self.target)
-        cols.remove('date')
-        df_raw = df_raw[['date'] + cols + [self.target]]
+        input_cols = [col for col in df_raw.columns if col != 'date']
+        if self.target not in input_cols:
+            raise ValueError(f"Target column {self.target} not found in data")
+        ot_idx = input_cols.index(self.target)
+        post_target_cols = input_cols[ot_idx + 1:]
+        output_cols = input_cols[:ot_idx + 1]
+        if output_cols[-1] != self.target:
+            raise ValueError(
+                f"Target column {self.target} must be the last column in output_cols; found {output_cols[-1]} at index {len(output_cols)-1}"
+            )
+        mode_like = [
+            col for col in post_target_cols
+            if ('mode' in col.lower())
+            or ('imf' in col.lower())
+            or ('svmd' in col.lower())
+            or col.lower().startswith(f"{self.target.lower()}_")
+        ]
+        if mode_like and any(col in output_cols for col in mode_like):
+            raise ValueError(
+                f"Detected possible mode columns before target ({mode_like}); please append SVMD/IMF/mode columns after {self.target}"
+            )
+        self.ot_idx = ot_idx
+        self.input_cols = input_cols
+        self.output_cols = output_cols
+        self.output_ot_idx = output_cols.index(self.target)
         num_train = int(len(df_raw) * 0.7)
         num_test = int(len(df_raw) * 0.2)
         num_vali = len(df_raw) - num_train - num_test
@@ -223,18 +343,42 @@ class Dataset_Custom(Dataset):
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
-        if self.features == 'M' or self.features == 'MS':
-            cols_data = df_raw.columns[1:]
-            df_data = df_raw[cols_data]
+        if self.features == 'M':
+            df_x = df_raw[input_cols]
+            df_y = df_raw[output_cols]
+        elif self.features == 'MS':
+            df_x = df_raw[input_cols]
+            df_y = df_raw[[self.target]]
         elif self.features == 'S':
-            df_data = df_raw[[self.target]]
-
-        if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
-            self.scaler.fit(train_data.values)
-            data = self.scaler.transform(df_data.values)
+            df_x = df_raw[[self.target]]
+            df_y = df_raw[[self.target]]
         else:
-            data = df_data.values
+            raise ValueError(f"Unsupported feature type: {self.features}")
+
+        out_dim = df_y.shape[1]
+        if self.scale:
+            train_data = df_x[border1s[0]:border2s[0]]
+            self.scaler.fit(train_data.values)
+            data_x = self.scaler.transform(df_x.values)
+            col_to_idx = {col: idx for idx, col in enumerate(input_cols)}
+            if self.features == 'M':
+                y_indices = [col_to_idx[c] for c in output_cols]
+                mean = self.scaler.mean_[y_indices]
+                scale = self.scaler.scale_[y_indices]
+                data_y = (df_y.values - mean) / scale
+            elif self.features == 'MS':
+                target_mean = self.scaler.mean_[col_to_idx[self.target]]
+                target_scale = self.scaler.scale_[col_to_idx[self.target]]
+                data_y = (df_y.values - target_mean) / target_scale
+            else:
+                data_y = self.scaler.transform(df_y.values)
+        else:
+            data_x = df_x.values
+            data_y = df_y.values
+
+        self.train_data = df_x[border1s[0]:border2s[0]].values
+        self.N = data_x.shape[1]
+        self.out_dim = out_dim
 
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
@@ -248,8 +392,8 @@ class Dataset_Custom(Dataset):
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
 
-        self.data_x = data[border1:border2]
-        self.data_y = data[border1:border2]
+        self.data_x = data_x[border1:border2]
+        self.data_y = data_y[border1:border2]
         self.data_stamp = data_stamp
 
     def __getitem__(self, index):
@@ -317,6 +461,9 @@ class Dataset_PEMS(Dataset):
 
         self.data_x = df
         self.data_y = df
+        self.train_data = train_data
+        self.N = self.data_x.shape[1]
+        self.out_dim = self.data_y.shape[1]
 
     def __getitem__(self, index):
         if self.set_type == 2:  
@@ -395,6 +542,9 @@ class Dataset_Solar(Dataset):
 
         self.data_x = data[border1:border2]
         self.data_y = data[border1:border2]
+        self.train_data = train_data if self.scale else df_data
+        self.N = self.data_x.shape[1]
+        self.out_dim = self.data_y.shape[1]
 
     def __getitem__(self, index):
         s_begin = index
@@ -419,7 +569,7 @@ class Dataset_Solar(Dataset):
 class Dataset_Pred(Dataset):
     def __init__(self, root_path, flag='pred', size=None,
                  features='S', data_path='ETTh1.csv',
-                 target='OT', scale=True, inverse=False, timeenc=0, freq='15min', cols=None):
+                 target='OT', scale=True, inverse=False, timeenc=0, freq='15min', cols=None, pred_y_from='x'):
         if size == None:
             self.seq_len = 24 * 4 * 4
             self.label_len = 24 * 4
@@ -437,6 +587,7 @@ class Dataset_Pred(Dataset):
         self.timeenc = timeenc
         self.freq = freq
         self.cols = cols
+        self.pred_y_from = pred_y_from
         self.root_path = root_path
         self.data_path = data_path
         self.__read_data__()
@@ -446,27 +597,71 @@ class Dataset_Pred(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
         if self.cols:
-            cols = self.cols.copy()
-            cols.remove(self.target)
+            input_cols = [col for col in self.cols if col != 'date']
         else:
-            cols = list(df_raw.columns)
-            cols.remove(self.target)
-            cols.remove('date')
-        df_raw = df_raw[['date'] + cols + [self.target]]
+            input_cols = [col for col in df_raw.columns if col != 'date']
+
+        if self.target not in input_cols:
+            raise ValueError(f"Target column {self.target} not found in data")
+        ot_idx = input_cols.index(self.target)
+        post_target_cols = input_cols[ot_idx + 1:]
+        output_cols = input_cols[:ot_idx + 1]
+        if output_cols[-1] != self.target:
+            raise ValueError(
+                f"Target column {self.target} must be the last column in output_cols; found {output_cols[-1]} at index {len(output_cols)-1}"
+            )
+        mode_like = [
+            col for col in post_target_cols
+            if ('mode' in col.lower())
+            or ('imf' in col.lower())
+            or ('svmd' in col.lower())
+            or col.lower().startswith(f"{self.target.lower()}_")
+        ]
+        if mode_like and any(col in output_cols for col in mode_like):
+            raise ValueError(
+                f"Detected possible mode columns before target ({mode_like}); please append SVMD/IMF/mode columns after {self.target}"
+            )
+        self.input_cols = input_cols
+        self.output_cols = output_cols
+        self.ot_idx = ot_idx
+        self.output_ot_idx = output_cols.index(self.target)
+
+        df_raw = df_raw[['date'] + input_cols]
         border1 = len(df_raw) - self.seq_len
         border2 = len(df_raw)
 
-        if self.features == 'M' or self.features == 'MS':
-            cols_data = df_raw.columns[1:]
-            df_data = df_raw[cols_data]
+        if self.features == 'M':
+            df_x = df_raw[input_cols]
+            df_y = df_raw[output_cols]
+        elif self.features == 'MS':
+            df_x = df_raw[input_cols]
+            df_y = df_raw[[self.target]]
         elif self.features == 'S':
-            df_data = df_raw[[self.target]]
+            df_x = df_raw[[self.target]]
+            df_y = df_raw[[self.target]]
+        else:
+            raise ValueError(f"Unsupported feature type: {self.features}")
+
+        out_dim = df_y.shape[1]
 
         if self.scale:
-            self.scaler.fit(df_data.values)
-            data = self.scaler.transform(df_data.values)
+            self.scaler.fit(df_x.values)
+            data_x = self.scaler.transform(df_x.values)
+            col_to_idx = {col: idx for idx, col in enumerate(input_cols)}
+            if self.features == 'M':
+                y_indices = [col_to_idx[c] for c in output_cols]
+                mean = self.scaler.mean_[y_indices]
+                scale = self.scaler.scale_[y_indices]
+                data_y = (df_y.values - mean) / scale
+            elif self.features == 'MS':
+                target_mean = self.scaler.mean_[col_to_idx[self.target]]
+                target_scale = self.scaler.scale_[col_to_idx[self.target]]
+                data_y = (df_y.values - target_mean) / target_scale
+            else:
+                data_y = self.scaler.transform(df_y.values)
         else:
-            data = df_data.values
+            data_x = df_x.values
+            data_y = df_y.values
 
         tmp_stamp = df_raw[['date']][border1:border2]
         tmp_stamp['date'] = pd.to_datetime(tmp_stamp.date)
@@ -486,12 +681,18 @@ class Dataset_Pred(Dataset):
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
 
-        self.data_x = data[border1:border2]
+        self.data_x = data_x[border1:border2]
         if self.inverse:
-            self.data_y = df_data.values[border1:border2]
+            warnings.warn(
+                "Dataset_Pred inverse=True returns seq_y derived from encoder inputs (N channels). "
+                "If your model expects decoder inputs of size c_out, consider setting pred_y_from='y' or disabling inverse.")
+            self.data_y = df_y.values[border1:border2]
         else:
-            self.data_y = data[border1:border2]
+            self.data_y = data_y[border1:border2]
         self.data_stamp = data_stamp
+
+        self.N = self.data_x.shape[1]
+        self.out_dim = out_dim
 
     def __getitem__(self, index):
         s_begin = index
@@ -501,7 +702,10 @@ class Dataset_Pred(Dataset):
 
         seq_x = self.data_x[s_begin:s_end]
         if self.inverse:
-            seq_y = self.data_x[r_begin:r_begin + self.label_len]
+            if self.pred_y_from == 'y':
+                seq_y = self.data_y[r_begin:r_begin + self.label_len]
+            else:
+                seq_y = self.data_x[r_begin:r_begin + self.label_len]
         else:
             seq_y = self.data_y[r_begin:r_begin + self.label_len]
         seq_x_mark = self.data_stamp[s_begin:s_end]
