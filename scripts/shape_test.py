@@ -62,7 +62,8 @@ def safe_imports(repo_root):
         sys.path.insert(0, repo_root)
     try:
         import torch  # noqa: F401
-    except ImportError:
+    except Exception as exc:
+        print(f"Torch import skipped due to: {exc}")
         torch = None
     try:
         from data_provider.data_loader import Dataset_Custom, Dataset_Pred
