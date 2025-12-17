@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from layers.Transformer_Encoder import Encoder, EncoderLayer
 from layers.SWTAttention_Family import GeomAttentionLayer, GeomAttention
 from layers.Embed import DataEmbedding_inverted
+import warnings
 
 
 class Model(nn.Module):
@@ -16,6 +17,8 @@ class Model(nn.Module):
         self.geomattn_dropout = configs.geomattn_dropout
         self.alpha = configs.alpha
         self.kernel_size = configs.kernel_size
+        self.c_out = configs.c_out
+        self.dec_in = configs.dec_in
 
         enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, 
                                                configs.embed, configs.freq, configs.dropout)
@@ -60,6 +63,13 @@ class Model(nn.Module):
             x_enc = x_enc / stdev
 
         _, _, N = x_enc.shape
+        if self.c_out > N:
+            raise ValueError(f"c_out ({self.c_out}) must be <= input channels N ({N}); check dataset out_dim or column ordering")
+        if self.dec_in != N:
+            warnings.warn(
+                f"dec_in ({self.dec_in}) differs from encoder input channels ({N}); set dec_in to N to match wavelet attention semantics",
+                stacklevel=2,
+            )
 
         enc_embedding = self.enc_embedding
         encoder = self.encoder
@@ -71,11 +81,13 @@ class Model(nn.Module):
         enc_out, attns = encoder(enc_out, attn_mask=None)
 
         # Output Projection             B L' N -> B H (Horizon) N
-        dec_out = projector(enc_out).permute(0, 2, 1)[:, :, :N] 
+        dec_out = projector(enc_out).permute(0, 2, 1)[:, :, :self.c_out]
 
         if self.use_norm:
-            dec_out = dec_out * (stdev[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
-            dec_out = dec_out + (means[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
+            out_stdev = stdev[:, 0, :self.c_out].unsqueeze(1).repeat(1, self.pred_len, 1)
+            out_means = means[:, 0, :self.c_out].unsqueeze(1).repeat(1, self.pred_len, 1)
+            dec_out = dec_out * out_stdev
+            dec_out = dec_out + out_means
 
         return dec_out, attns
 
