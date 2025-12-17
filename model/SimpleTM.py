@@ -16,6 +16,7 @@ class Model(nn.Module):
         self.geomattn_dropout = configs.geomattn_dropout
         self.alpha = configs.alpha
         self.kernel_size = configs.kernel_size
+        self.c_out = configs.c_out
 
         enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, 
                                                configs.embed, configs.freq, configs.dropout)
@@ -71,7 +72,7 @@ class Model(nn.Module):
         enc_out, attns = encoder(enc_out, attn_mask=None)
 
         # Output Projection             B L' N -> B H (Horizon) N
-        dec_out = projector(enc_out).permute(0, 2, 1)[:, :, :N] 
+        dec_out = projector(enc_out).permute(0, 2, 1)[:, :, :self.c_out]
 
         if self.use_norm:
             dec_out = dec_out * (stdev[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))

@@ -4,6 +4,7 @@ from experiments.exp_long_term_forecasting import Exp_Long_Term_Forecast
 import random
 import numpy as np
 from model.SimpleTM import Model
+from data_provider.data_factory import data_dict
 
 if __name__ == '__main__':
 
@@ -103,6 +104,25 @@ if __name__ == '__main__':
     random.seed(fix_seed)
     torch.manual_seed(fix_seed)
     np.random.seed(fix_seed)
+
+    Data = data_dict[args.data]
+    timeenc = 0 if args.embed != 'timeF' else 1
+    dataset_for_dims = Data(
+        root_path=args.root_path,
+        data_path=args.data_path,
+        flag='train',
+        size=[args.seq_len, args.label_len, args.pred_len],
+        features=args.features,
+        target=args.target,
+        timeenc=timeenc,
+        freq=args.freq,
+    )
+    n_in = getattr(dataset_for_dims, 'N', dataset_for_dims.data_x.shape[1])
+    n_out = getattr(dataset_for_dims, 'out_dim', dataset_for_dims.data_y.shape[1])
+    args.enc_in = n_in
+    args.dec_in = n_in
+    args.c_out = n_out
+    args.n_series = n_in
 
     if args.use_gpu and args.use_multi_gpu:
         args.devices = args.devices.replace(' ', '')

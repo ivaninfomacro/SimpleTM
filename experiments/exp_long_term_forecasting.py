@@ -72,9 +72,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                     else:
                         outputs, _ = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                outputs = outputs[:, -self.args.pred_len:, :self.args.c_out]
+                batch_y = batch_y[:, -self.args.pred_len:, :self.args.c_out].to(self.device)
 
                 pred = outputs.detach().cpu()
                 true = batch_y.detach().cpu()
@@ -83,8 +82,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     B, T, C = pred.shape
                     pred = pred.numpy()
                     true = true.numpy()
-                    pred = vali_data.inverse_transform(pred.reshape(-1, C)).reshape(B, T, C)
-                    true = vali_data.inverse_transform(true.reshape(-1, C)).reshape(B, T, C)
+                    mean = vali_data.scaler.mean_[: self.args.c_out]
+                    scale = vali_data.scaler.scale_[: self.args.c_out]
+                    pred = pred * scale + mean
+                    true = true * scale + mean
                     mae, mse, rmse, mape, mspe = metric(pred, true)
                     total_loss.append(mae)
                 else:
@@ -155,10 +156,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                         else:
                             outputs, _ = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                        f_dim = -1 if self.args.features == 'MS' else 0
-                        outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                        batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                        loss = criterion(outputs, batch_y) 
+                        outputs = outputs[:, -self.args.pred_len:, :self.args.c_out]
+                        batch_y = batch_y[:, -self.args.pred_len:, :self.args.c_out].to(self.device)
+                        loss = criterion(outputs, batch_y)
                         train_loss.append(loss.item())
                 else:
                     if self.args.output_attention:
@@ -166,11 +166,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     else:
                         outputs, attn = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                    f_dim = -1 if self.args.features == 'MS' else 0                        
-                    outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                    batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                    
-                    loss = criterion(outputs, batch_y) + self.args.l1_weight * attn[0] 
+                    outputs = outputs[:, -self.args.pred_len:, :self.args.c_out]
+                    batch_y = batch_y[:, -self.args.pred_len:, :self.args.c_out].to(self.device)
+
+                    loss = criterion(outputs, batch_y) + self.args.l1_weight * attn[0]
                     train_loss.append(loss.item())
 
                 if (i + 1) % 30 == 0:
@@ -263,9 +262,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     else:
                         outputs, _ = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                outputs = outputs[:, -self.args.pred_len:, :self.args.c_out]
+                batch_y = batch_y[:, -self.args.pred_len:, :self.args.c_out].to(self.device)
                 outputs = outputs.detach().cpu().numpy()
                 batch_y = batch_y.detach().cpu().numpy()
 
@@ -279,8 +277,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     if test_data.scale and self.args.inverse:
                         shape = input.shape
                         input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
-                    gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
-                    pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
+                    target_idx = getattr(test_data, 'output_ot_idx', getattr(test_data, 'ot_idx', -1))
+                    gt = np.concatenate((input[0, :, target_idx], true[0, :, target_idx]), axis=0)
+                    pd = np.concatenate((input[0, :, target_idx], pred[0, :, target_idx]), axis=0)
                     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
         preds = np.array(preds)
@@ -291,9 +290,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         print('test shape:', preds.shape, trues.shape)
 
         if self.args.data == 'PEMS':
-            B, T, C = preds.shape
-            preds = test_data.inverse_transform(preds.reshape(-1, C)).reshape(B, T, C)
-            trues = test_data.inverse_transform(trues.reshape(-1, C)).reshape(B, T, C)
+            mean = test_data.scaler.mean_[: self.args.c_out]
+            scale = test_data.scaler.scale_[: self.args.c_out]
+            preds = preds * scale + mean
+            trues = trues * scale + mean
 
         # result save
         folder_path = './checkpoints/' + setting + '/'
@@ -350,10 +350,12 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                     else:
                         outputs, _ = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                outputs = outputs[:, -self.args.pred_len:, :self.args.c_out]
                 outputs = outputs.detach().cpu().numpy()
                 if pred_data.scale and self.args.inverse:
-                    shape = outputs.shape
-                    outputs = pred_data.inverse_transform(outputs.squeeze(0)).reshape(shape)
+                    mean = pred_data.scaler.mean_[:self.args.c_out]
+                    scale = pred_data.scaler.scale_[:self.args.c_out]
+                    outputs = outputs * scale + mean
                 preds.append(outputs)
 
         preds = np.array(preds)
