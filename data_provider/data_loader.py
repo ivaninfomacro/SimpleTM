@@ -89,6 +89,14 @@ class Dataset_ETT_hour(Dataset):
         self.N = data_x.shape[1]
         self.out_dim = data_y.shape[1]
 
+        self.train_data = df_data[border1s[0]:border2s[0]].values
+        self.N = data.shape[1]
+        self.out_dim = 1 if self.features in ['S', 'MS'] else self.N
+
+        self.train_data = df_data[border1s[0]:border2s[0]].values
+        self.N = data.shape[1]
+        self.out_dim = 1 if self.features in ['S', 'MS'] else self.N
+
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
         if self.timeenc == 0:
