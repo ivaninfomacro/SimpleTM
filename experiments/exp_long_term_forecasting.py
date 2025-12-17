@@ -72,9 +72,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                     else:
                         outputs, _ = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                outputs = outputs[:, -self.args.pred_len:, :self.args.c_out]
+                batch_y = batch_y[:, -self.args.pred_len:, :self.args.c_out].to(self.device)
 
                 pred = outputs.detach().cpu()
                 true = batch_y.detach().cpu()
@@ -155,10 +154,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                         else:
                             outputs, _ = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                        f_dim = -1 if self.args.features == 'MS' else 0
-                        outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                        batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                        loss = criterion(outputs, batch_y) 
+                        outputs = outputs[:, -self.args.pred_len:, :self.args.c_out]
+                        batch_y = batch_y[:, -self.args.pred_len:, :self.args.c_out].to(self.device)
+                        loss = criterion(outputs, batch_y)
                         train_loss.append(loss.item())
                 else:
                     if self.args.output_attention:
@@ -166,11 +164,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     else:
                         outputs, attn = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                    f_dim = -1 if self.args.features == 'MS' else 0                        
-                    outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                    batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                    
-                    loss = criterion(outputs, batch_y) + self.args.l1_weight * attn[0] 
+                    outputs = outputs[:, -self.args.pred_len:, :self.args.c_out]
+                    batch_y = batch_y[:, -self.args.pred_len:, :self.args.c_out].to(self.device)
+
+                    loss = criterion(outputs, batch_y) + self.args.l1_weight * attn[0]
                     train_loss.append(loss.item())
 
                 if (i + 1) % 30 == 0:
@@ -263,9 +260,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     else:
                         outputs, _ = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                outputs = outputs[:, -self.args.pred_len:, :self.args.c_out]
+                batch_y = batch_y[:, -self.args.pred_len:, :self.args.c_out].to(self.device)
                 outputs = outputs.detach().cpu().numpy()
                 batch_y = batch_y.detach().cpu().numpy()
 
@@ -279,8 +275,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     if test_data.scale and self.args.inverse:
                         shape = input.shape
                         input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
-                    gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
-                    pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
+                    target_idx = getattr(test_data, 'output_ot_idx', getattr(test_data, 'ot_idx', -1))
+                    gt = np.concatenate((input[0, :, target_idx], true[0, :, target_idx]), axis=0)
+                    pd = np.concatenate((input[0, :, target_idx], pred[0, :, target_idx]), axis=0)
                     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
         preds = np.array(preds)
@@ -350,6 +347,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                     else:
                         outputs, _ = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                outputs = outputs[:, -self.args.pred_len:, :self.args.c_out]
                 outputs = outputs.detach().cpu().numpy()
                 if pred_data.scale and self.args.inverse:
                     shape = outputs.shape
