@@ -82,8 +82,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     B, T, C = pred.shape
                     pred = pred.numpy()
                     true = true.numpy()
-                    pred = vali_data.inverse_transform(pred.reshape(-1, C)).reshape(B, T, C)
-                    true = vali_data.inverse_transform(true.reshape(-1, C)).reshape(B, T, C)
+                    mean = vali_data.scaler.mean_[: self.args.c_out]
+                    scale = vali_data.scaler.scale_[: self.args.c_out]
+                    pred = pred * scale + mean
+                    true = true * scale + mean
                     mae, mse, rmse, mape, mspe = metric(pred, true)
                     total_loss.append(mae)
                 else:
@@ -288,9 +290,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         print('test shape:', preds.shape, trues.shape)
 
         if self.args.data == 'PEMS':
-            B, T, C = preds.shape
-            preds = test_data.inverse_transform(preds.reshape(-1, C)).reshape(B, T, C)
-            trues = test_data.inverse_transform(trues.reshape(-1, C)).reshape(B, T, C)
+            mean = test_data.scaler.mean_[: self.args.c_out]
+            scale = test_data.scaler.scale_[: self.args.c_out]
+            preds = preds * scale + mean
+            trues = trues * scale + mean
 
         # result save
         folder_path = './checkpoints/' + setting + '/'
@@ -350,8 +353,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 outputs = outputs[:, -self.args.pred_len:, :self.args.c_out]
                 outputs = outputs.detach().cpu().numpy()
                 if pred_data.scale and self.args.inverse:
-                    shape = outputs.shape
-                    outputs = pred_data.inverse_transform(outputs.squeeze(0)).reshape(shape)
+                    mean = pred_data.scaler.mean_[:self.args.c_out]
+                    scale = pred_data.scaler.scale_[:self.args.c_out]
+                    outputs = outputs * scale + mean
                 preds.append(outputs)
 
         preds = np.array(preds)
