@@ -75,8 +75,10 @@ class Model(nn.Module):
         dec_out = projector(enc_out).permute(0, 2, 1)[:, :, :self.c_out]
 
         if self.use_norm:
-            dec_out = dec_out * (stdev[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
-            dec_out = dec_out + (means[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
+            out_stdev = stdev[:, 0, :self.c_out].unsqueeze(1).repeat(1, self.pred_len, 1)
+            out_means = means[:, 0, :self.c_out].unsqueeze(1).repeat(1, self.pred_len, 1)
+            dec_out = dec_out * out_stdev
+            dec_out = dec_out + out_means
 
         return dec_out, attns
 

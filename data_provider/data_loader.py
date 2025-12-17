@@ -125,6 +125,7 @@ class Dataset_ETT_hour(Dataset):
         return self.scaler.inverse_transform(data)
 
 
+
 class Dataset_ETT_minute(Dataset):
     def __init__(self, root_path, flag='train', size=None,
                  features='S', data_path='ETTm1.csv',
@@ -541,30 +542,53 @@ class Dataset_Pred(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
         if self.cols:
-            cols = self.cols.copy()
-            if self.target in cols:
-                cols.remove(self.target)
+            input_cols = [col for col in self.cols if col != 'date']
         else:
-            cols = [col for col in df_raw.columns if col not in ['date', self.target]]
-        input_cols = cols + [self.target]
+            input_cols = [col for col in df_raw.columns if col != 'date']
+
         if self.target not in input_cols:
             raise ValueError(f"Target column {self.target} not found in data")
+        ot_idx = input_cols.index(self.target)
+        output_cols = input_cols[:ot_idx + 1]
         self.input_cols = input_cols
-        self.ot_idx = input_cols.index(self.target)
+        self.output_cols = output_cols
+        self.ot_idx = ot_idx
+        self.output_ot_idx = output_cols.index(self.target)
+
         df_raw = df_raw[['date'] + input_cols]
         border1 = len(df_raw) - self.seq_len
         border2 = len(df_raw)
 
-        if self.features == 'M' or self.features == 'MS':
-            df_data = df_raw[input_cols]
+        if self.features == 'M':
+            df_x = df_raw[input_cols]
+            df_y = df_raw[output_cols]
+        elif self.features == 'MS':
+            df_x = df_raw[input_cols]
+            df_y = df_raw[[self.target]]
         elif self.features == 'S':
-            df_data = df_raw[[self.target]]
+            df_x = df_raw[[self.target]]
+            df_y = df_raw[[self.target]]
+        else:
+            raise ValueError(f"Unsupported feature type: {self.features}")
+
+        out_dim = df_y.shape[1]
 
         if self.scale:
-            self.scaler.fit(df_data.values)
-            data = self.scaler.transform(df_data.values)
+            self.scaler.fit(df_x.values)
+            data_x = self.scaler.transform(df_x.values)
+            if self.features == 'M':
+                mean = self.scaler.mean_[:out_dim]
+                scale = self.scaler.scale_[:out_dim]
+                data_y = (df_y.values - mean) / scale
+            elif self.features == 'MS':
+                target_mean = self.scaler.mean_[self.ot_idx]
+                target_scale = self.scaler.scale_[self.ot_idx]
+                data_y = (df_y.values - target_mean) / target_scale
+            else:
+                data_y = self.scaler.transform(df_y.values)
         else:
-            data = df_data.values
+            data_x = df_x.values
+            data_y = df_y.values
 
         tmp_stamp = df_raw[['date']][border1:border2]
         tmp_stamp['date'] = pd.to_datetime(tmp_stamp.date)
@@ -584,12 +608,15 @@ class Dataset_Pred(Dataset):
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
 
-        self.data_x = data[border1:border2]
+        self.data_x = data_x[border1:border2]
         if self.inverse:
-            self.data_y = df_data.values[border1:border2]
+            self.data_y = df_y.values[border1:border2]
         else:
-            self.data_y = data[border1:border2]
+            self.data_y = data_y[border1:border2]
         self.data_stamp = data_stamp
+
+        self.N = self.data_x.shape[1]
+        self.out_dim = out_dim
 
     def __getitem__(self, index):
         s_begin = index
